@@ -879,8 +879,10 @@ Resources:
                 AllowStreamingResponses: !Ref AllowStreamingResponses
                 ShouldEnableUpload: !Ref ShouldEnableUpload
                 UploadBucket: !Ref UploadBucket
-                VpcSubnetId: !Ref VpcSubnetId
-                VpcSecurityGroupId: !Ref VpcSecurityGroupId
+                # VpcSubnetId: !Ref VpcSubnetId
+                # VpcSecurityGroupId: !Ref VpcSecurityGroupId
+                VpcSubnetId: !If [NeedsVpc, !Ref VpcSubnetId, !Ref "AWS::NoValue"]
+                VpcSecurityGroupId: !If [NeedsVpc, !Ref VpcSecurityGroupId, !Ref "AWS::NoValue"]
                 Timestamp: 1726842081
 
     CognitoIdentityPoolConfig:
