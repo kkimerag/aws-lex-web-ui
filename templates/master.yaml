@@ -897,8 +897,10 @@ Resources:
                 CodeBuildProjectName: !GetAtt CodeBuildDeploy.Outputs.CodeBuildProject
                 CognitoUserPool: !GetAtt CognitoIdentityPool.Outputs.CognitoUserPoolId
                 CognitoUserPoolClient: !GetAtt CognitoIdentityPool.Outputs.CognitoUserPoolClientId
-                VpcSubnetId: !Ref VpcSubnetId
-                VpcSecurityGroupId: !Ref VpcSecurityGroupId
+                # VpcSubnetId: !Ref VpcSubnetId
+                # VpcSecurityGroupId: !Ref VpcSecurityGroupId
+                VpcSubnetId: !If [NeedsVpc, !Ref VpcSubnetId, !Ref "AWS::NoValue"]
+                VpcSecurityGroupId: !If [NeedsVpc, !Ref VpcSecurityGroupId, !Ref "AWS::NoValue"]
                 Timestamp: 1726842081
 
     ##########################################################################
