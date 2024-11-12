@@ -268,7 +268,7 @@ Parameters:
             S3 bucket containing pre-staged nested templates and source artifacts
     BootstrapPrefix:
         Type: String
-        Default: aws-lex-web-ui/artifacts
+        Default: aws-lex-web-ui
         Description: >
             S3 prefix where the templates and source are stored under
 
@@ -783,10 +783,10 @@ Resources:
                 CodeBuildName: !Ref CodeBuildName
                 SourceBucket: !Ref BootstrapBucket
                 SourcePrefix: !Ref BootstrapPrefix
-                SourceObject: !Sub "${BootstrapPrefix}/src-v0.21.6.zip"
-                CustomResourceCodeObject: !Sub "${BootstrapPrefix}/custom-resources-v0.21.6.zip"
-                InitiateChatLambdaCodeObject: !Sub "${BootstrapPrefix}/initiate-chat-lambda-v0.21.6.zip"
-                StreamingLambdaCodeObject: !Sub "${BootstrapPrefix}/streaming-lambda-v0.21.6.zip"
+                SourceObject: !Sub "${BootstrapPrefix}/artifacts/src-v0.21.6.zip"
+                CustomResourceCodeObject: !Sub "${BootstrapPrefix}/artifacts/custom-resources-v0.21.6.zip"
+                InitiateChatLambdaCodeObject: !Sub "${BootstrapPrefix}/artifacts/initiate-chat-lambda-v0.21.6.zip"
+                StreamingLambdaCodeObject: !Sub "${BootstrapPrefix}/artifacts/streaming-lambda-v0.21.6.zip"
                 CleanupBuckets: !Ref CleanupBuckets
                 BotName:
                     !If
