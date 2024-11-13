@@ -586,7 +586,7 @@ Resources:
         UpdateReplacePolicy: Retain
         DeletionPolicy: Retain
         Properties:
-            BucketName: !Sub "${AWS::StackName}-bucket"
+            BucketName: ieva-user-bot-webs
             WebsiteConfiguration:
                 IndexDocument: index.html
             VersioningConfiguration:
