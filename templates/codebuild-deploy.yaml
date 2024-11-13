@@ -966,7 +966,7 @@ Resources:
             TimeoutInMinutes: 10
             Source:
                 Type: S3
-                Location: !Sub "${SourceBucket}/${SourceObject}"
+                Location: !Sub "${SourceBucket}/aws-lex-web-ui/"
                 BuildSpec: !Sub |
                     version: 0.1
                     phases:
