@@ -586,7 +586,7 @@ Resources:
         UpdateReplacePolicy: Retain
         DeletionPolicy: Retain
         Properties:
-            BucketName: "IEVA-WEB-APPS"
+            BucketName: "ieva-user-bot-webs"
             WebsiteConfiguration:
                 IndexDocument: index.html
             VersioningConfiguration:
