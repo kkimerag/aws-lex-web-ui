@@ -917,7 +917,7 @@ Resources:
                     - Name: IFRAME_ORIGIN
                       Value: !Sub "https://${LexWebUiDistribution.DomainName}"
                     - Name: PARENT_DOMAIN
-                      Value: Value: !Select [2, !Split ["//", !Ref ParentOrigin]]
+                      Value: !Select [2, !Split ["//", !Ref ParentOrigin]]
                     - Name: WEBAPP_BUCKET_REGIONALDOMAINNAME
                       Value: !Sub "${WebAppBucket.RegionalDomainName}"
                     - Name: CLOUDFRONT_DOMAIN
