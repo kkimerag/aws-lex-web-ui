@@ -586,6 +586,7 @@ Resources:
         UpdateReplacePolicy: Retain
         DeletionPolicy: Retain
         Properties:
+            BucketName: "IEVA-WEB-APPS"
             WebsiteConfiguration:
                 IndexDocument: index.html
             VersioningConfiguration:
@@ -915,6 +916,10 @@ Resources:
                         - !Ref ParentOrigin
                     - Name: IFRAME_ORIGIN
                       Value: !Sub "https://${LexWebUiDistribution.DomainName}"
+                    - Name: PARENT_DOMAIN
+                      Value: !Sub
+                        - ${domain#https://}
+                        - domain: !Select [0, !Split ["/", !Ref ParentOrigin]]
                     - Name: WEBAPP_BUCKET_REGIONALDOMAINNAME
                       Value: !Sub "${WebAppBucket.RegionalDomainName}"
                     - Name: CLOUDFRONT_DOMAIN
