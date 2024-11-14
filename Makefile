@@ -25,6 +25,13 @@ USER_CUSTOM_CSS_COPY := $(WEBAPP_DIR)/current/user-custom-chatbot-style.css
 # Add PARENT_DOMAIN to S3 path. If not set, use 'default'
 DOMAIN_PATH := $(if $(PARENT_DOMAIN),$(PARENT_DOMAIN),default)
 
+# Clean previous configs
+clean-config:
+	@echo "[INFO] Cleaning previous configurations"
+	rm -f $(CURRENT_CONFIG_FILE)
+	rm -f $(USER_CUSTOM_CSS_COPY)
+.PHONY: clean-config
+
 # this install all the npm dependencies needed to build from scratch
 install-deps:
 	@echo "[INFO] Installing loader npm dependencies"
@@ -33,8 +40,8 @@ install-deps:
 	cd $(WEBAPP_DIR) && npm install
 .PHONY: install-deps
 
-load-current-config:
-	@echo "[INFO] Downloading current lex-web-ui-loader-config.json from s3 to merge user changes"
+load-current-config: clean-config
+	@echo "[INFO] Loading configuration for domain: $(DOMAIN_PATH)"
 	@echo "[INFO] Downloading s3://$(WEBAPP_BUCKET)/$(DOMAIN_PATH)/lex-web-ui-loader-config.json if it exists or load defaults"
 	-aws s3 ls "s3://$(WEBAPP_BUCKET)/$(DOMAIN_PATH)/lex-web-ui-loader-config.json" && \
     	aws s3 cp "s3://$(WEBAPP_BUCKET)/$(DOMAIN_PATH)/lex-web-ui-loader-config.json" "$(CURRENT_CONFIG_FILE)" || \
