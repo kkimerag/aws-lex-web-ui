@@ -1100,8 +1100,11 @@ Resources:
                           - Effect: Allow
                             Action:
                                 - s3:GetObject*
+                                - s3:ListBucket
                             Resource:
-                                - !Sub "arn:aws:s3:::${SourceBucket}/${SourceObject}"
+                                - !Sub "arn:aws:s3:::${SourceBucket}"  # Added bucket-level resource
+                                - !Sub "arn:aws:s3:::${SourceBucket}/*"
+                                - !Sub "arn:aws:s3:::${SourceBucket}/aws-lex-web-ui/*"
                 - PolicyName: S3ReadWrite
                   PolicyDocument:
                       Version: 2012-10-17
