@@ -749,6 +749,10 @@ Resources:
               OriginRequestPolicyId: "88a5eaf4-2fd4-4709-b370-b4c650ea3fcf"
               ViewerProtocolPolicy: redirect-to-https
               ResponseHeadersPolicyId: !GetAtt LexWebUIResponseHeaderPolicy.Id
+              ForwardedValues:
+                  QueryString: false
+                  Cookies:
+                    Forward: none
             Aliases:
               !If
                 - UseDefaultCloudfrontUrl
