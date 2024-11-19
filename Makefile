@@ -135,7 +135,7 @@ deploy-to-s3: create-iframe-snippet modify-index-html
 
 # Run by CodeBuild deployment mode when which uses the prebuilt libraries
 # Can also be used to easily copy local changes to a bucket
-sync-website: create-iframe-snippet
+sync-website: create-iframe-snippet modify-index-html
 	@[ "$(WEBAPP_BUCKET)" ] || \
 		(echo "[ERROR] WEBAPP_BUCKET variable not set" ; exit 1)
 	@echo "[INFO] copying web site files to [s3://$(WEBAPP_BUCKET)/$(DOMAIN_PATH)]"
