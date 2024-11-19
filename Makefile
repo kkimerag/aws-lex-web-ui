@@ -28,6 +28,12 @@ ifeq ($(DOMAIN_PATH),)
 DOMAIN_PATH := default
 endif
 
+# Add base href modification step
+modify-index-html:
+	@echo "[INFO] Adding base href to index.html with domain path: $(DOMAIN_PATH)"
+	sed -i '/<head>/a\    <base href="$(DOMAIN_PATH)/">' $(WEBAPP_DIST_DIR)/index.html
+.PHONY: modify-index-html
+
 # this install all the npm dependencies needed to build from scratch
 install-deps:
 	@echo "[INFO] Installing loader npm dependencies"
@@ -95,7 +101,7 @@ create-iframe-snippet: $(IFRAME_SNIPPET_FILE)
 # used by the Pipeline deployment mode when building from scratch
 WEBAPP_DIST_DIR := $(WEBAPP_DIR)/dist
 CODEBUILD_BUILD_ID ?= none
-deploy-to-s3: create-iframe-snippet
+deploy-to-s3: create-iframe-snippet modify-index-html
 	@[ "$(WEBAPP_BUCKET)" ] || \
 		(echo "[ERROR] WEBAPP_BUCKET env var not set" ; exit 1)
 	@echo "[INFO] deploying to S3 webapp bucket: [$(WEBAPP_BUCKET)/$(DOMAIN_PATH)]"
