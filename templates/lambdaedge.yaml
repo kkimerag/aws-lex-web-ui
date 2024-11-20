@@ -24,7 +24,129 @@ Resources:
               - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
           Path: "/"
 
+  EdgeLambdaCleanupRole:
+        Type: AWS::IAM::Role
+        Properties:
+            AssumeRolePolicyDocument:
+                Version: '2012-10-17'
+                Statement:
+                    - Effect: Allow
+                      Principal:
+                          Service: lambda.amazonaws.com
+                      Action: sts:AssumeRole
+            ManagedPolicyArns:
+                - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+            Policies:
+                - PolicyName: LambdaEdgeCleanup
+                  PolicyDocument:
+                      Version: '2012-10-17'
+                      Statement:
+                          - Effect: Allow
+                            Action:
+                                - lambda:DeleteFunction
+                                - lambda:GetFunction
+                                - cloudfront:GetDistribution
+                                - cloudfront:ListDistributions
+                            Resource: '*'
+
+  EdgeLambdaCleanupFunction:
+      Type: AWS::Lambda::Function
+      Properties:
+          Handler: index.handler
+          Role: !GetAtt EdgeLambdaCleanupRole.Arn
+          Code:
+              ZipFile: |
+                  import boto3
+                  import cfnresponse
+                  import time
+                  
+                  def handler(event, context):
+                      lambda_client = boto3.client('lambda')
+                      cf_client = boto3.client('cloudfront')
+                      
+                      try:
+                          if event['RequestType'] == 'Delete':
+                              function_name = event['ResourceProperties']['FunctionName']
+                              version = event['ResourceProperties']['Version']
+                              
+                              # Wait for CloudFront to fully disable the Lambda@Edge function
+                              wait_for_function_disable(cf_client, function_name)
+                              
+                              # Try to delete the function version
+                              retry_delete_function(lambda_client, function_name, version)
+                              
+                          cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                      except Exception as e:
+                          print(f"Error: {str(e)}")
+                          cfnresponse.send(event, context, cfnresponse.FAILED, {"Error": str(e)})
+                  
+                  def wait_for_function_disable(cf_client, function_name):
+                      max_attempts = 30
+                      attempt = 0
+                      while attempt < max_attempts:
+                          distributions = cf_client.list_distributions()['DistributionList'].get('Items', [])
+                          is_in_use = False
+                          
+                          for dist in distributions:
+                              dist_config = cf_client.get_distribution(Id=dist['Id'])['Distribution']['DistributionConfig']
+                              if check_function_in_distribution(dist_config, function_name):
+                                  is_in_use = True
+                                  break
+                          
+                          if not is_in_use:
+                              print(f"Function {function_name} is no longer used by any CloudFront distributions")
+                              return
+                              
+                          attempt += 1
+                          if attempt < max_attempts:
+                              time.sleep(30)  # Wait 30 seconds before checking again
+                      
+                      raise Exception(f"Timeout waiting for function {function_name} to be disabled in CloudFront")
+                  
+                  def check_function_in_distribution(dist_config, function_name):
+                      behavior = dist_config.get('DefaultCacheBehavior', {})
+                      lambdas = behavior.get('LambdaFunctionAssociations', {}).get('Items', [])
+                      
+                      for lambda_assoc in lambdas:
+                          if function_name in lambda_assoc.get('LambdaFunctionARN', ''):
+                              return True
+                      return False
+                  
+                  def retry_delete_function(lambda_client, function_name, version):
+                      max_attempts = 10
+                      attempt = 0
+                      
+                      while attempt < max_attempts:
+                          try:
+                              lambda_client.delete_function(
+                                  FunctionName=function_name,
+                                  Qualifier=version
+                              )
+                              print(f"Successfully deleted function {function_name}:{version}")
+                              return
+                          except lambda_client.exceptions.ResourceNotFoundException:
+                              print(f"Function {function_name}:{version} already deleted")
+                              return
+                          except Exception as e:
+                              print(f"Attempt {attempt + 1} failed: {str(e)}")
+                              attempt += 1
+                              if attempt < max_attempts:
+                                  time.sleep(30)  # Wait 30 seconds before retrying
+                      
+                      raise Exception(f"Failed to delete function {function_name}:{version} after {max_attempts} attempts")
+          Runtime: python3.9
+          Timeout: 900  # 15 minutes
+          MemorySize: 128
+
+  EdgeLambdaCleanupTrigger:
+      Type: Custom::EdgeLambdaCleanup
+      Properties:
+          ServiceToken: !GetAtt EdgeLambdaCleanupFunction.Arn
+          FunctionName: !Ref EdgeLambdaFunction
+          Version: !GetAtt EdgeLambdaVersion.Version
+
   EdgeLambdaFunction:
+      DependsOn: EdgeLambdaCleanupFunction
       Type: AWS::Lambda::Function
       Properties:
           FunctionName: !Sub "${ResourcePrefix}-edge-lambda"
