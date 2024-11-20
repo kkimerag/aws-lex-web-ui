@@ -771,6 +771,15 @@ Resources:
                 AllowStreamingResponses: !Ref AllowStreamingResponses
                 AllowedSignUpEmailDomain: !Ref AllowedSignUpEmailDomain
 
+    EdgeLambdaStack:
+        Type: AWS::CloudFormation::Stack
+        Properties:
+            TemplateURL: !Sub "https://${BootstrapBucket}.s3.${AWS::Region}.amazonaws.com/${BootstrapPrefix}/templates/lambdaedge.yaml"
+            Parameters:
+                ResourcePrefix: !Ref "AWS::StackName"
+                # Since Lambda@Edge must be in us-east-1, we need to create this stack there
+            Region: us-east-1
+
     ##########################################################################
     # Simplified deployment using CodeBuild to build config and push to S3
     ##########################################################################
@@ -884,6 +893,7 @@ Resources:
                 VpcSubnetId: !If [NeedsVpc, !Ref VpcSubnetId, !Ref "AWS::NoValue"]
                 VpcSecurityGroupId: !If [NeedsVpc, !Ref VpcSecurityGroupId, !Ref "AWS::NoValue"]
                 Timestamp: 1726842081
+                EdgeLambdaVersionArn: !GetAtt EdgeLambdaStack.Outputs.LambdaVersionArn
 
     CognitoIdentityPoolConfig:
         Type: AWS::CloudFormation::Stack

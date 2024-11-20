@@ -555,6 +555,10 @@ Parameters:
         Type: String
         Default: ''
         Description: ID of a security group where all Lambda functions will run, only used if you need Lambda to run in a VPC
+
+    EdgeLambdaVersionArn:
+        Type: String
+        Description: ARN of the Lambda@Edge function version to use for origin requests    
              
 Conditions:
     NeedsParentOrigin: !Equals [!Ref ParentOrigin, '']
