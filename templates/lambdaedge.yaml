@@ -1,13 +1,8 @@
-AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Lambda@Edge function for CloudFront CORS and security headers'
-
-Parameters:
-  ResourcePrefix:
-    Type: String
-    Description: Prefix for resource names
+AWSTemplateFormatVersion: 2010-09-09
+Description: Lambda@Edge function for Origin Request modification
 
 Resources:
-  LambdaExecutionRole:
+  EdgeLambdaRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -21,211 +16,48 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-      Policies:
-        - PolicyName: EdgeLambdaLogs
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                Resource: 
-                  - !Sub "arn:aws:logs:*:${AWS::AccountId}:log-group:/aws/lambda/*"
-                  - !Sub "arn:aws:logs:*:${AWS::AccountId}:log-group:/aws/lambda/*:*"
+      Path: "/"
 
-  EdgeFunction:
+  EdgeLambdaFunction:
     Type: AWS::Lambda::Function
-    UpdateReplacePolicy: Retain
-    DeletionPolicy: Retain
     Properties:
       Code:
         ZipFile: |
           def lambda_handler(event, context):
               request = event['Records'][0]['cf']['request']
-              response = event['Records'][0]['cf']['response']
+              uri = request['uri']
               
-              headers = response['headers']
+              headers = request.get('headers', {})
               
-              headers['access-control-allow-origin'] = [{
-                  'key': 'Access-Control-Allow-Origin',
-                  'value': '*'
-              }]
+              referer = headers.get('referer', [{'value': ''}])[0].get('value', '')
+              print(f"Referer: {referer}")
               
-              headers['access-control-allow-methods'] = [{
-                  'key': 'Access-Control-Allow-Methods',
-                  'value': 'GET, POST, OPTIONS'
-              }]
-              
-              headers['access-control-allow-headers'] = [{
-                  'key': 'Access-Control-Allow-Headers',
-                  'value': 'Content-Type, X-Amz-Date, Authorization, X-Api-Key, X-Amz-Security-Token, X-Amz-User-Agent'
-              }]
-              
-              headers['access-control-allow-credentials'] = [{
-                  'key': 'Access-Control-Allow-Credentials',
-                  'value': 'true'
-              }]
-              
-              headers['content-security-policy'] = [{
-                  'key': 'Content-Security-Policy',
-                  'value': "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; connect-src * 'unsafe-inline' data: blob:; script-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline' data: blob:;"
-              }]
-              
-              if request['method'] == 'OPTIONS':
-                  response['status'] = '204'
-                  response['statusDescription'] = 'OK'
-              
-              return response
+              try:
+                  if referer:
+                      folder = referer.split('://')[-1].split('/')[1]
+                      uri = uri.lstrip('/')
+                      request['uri'] = f"/{folder}/{uri}"
+                      print(f"Modified URI: {request['uri']}")
+                  else:
+                      print("No referer found")
+              except Exception as e:
+                  print(f"Error: {e}")
+                  
+              return request
+
       Handler: index.lambda_handler
-      Role: !GetAtt LambdaExecutionRole.Arn
-      Runtime: python3.10
+      Role: !GetAtt EdgeLambdaRole.Arn
+      Runtime: python3.9
       Timeout: 5
       MemorySize: 128
 
-  EdgeFunctionVersion:
+  EdgeLambdaVersion:
     Type: AWS::Lambda::Version
-    UpdateReplacePolicy: Retain
-    DeletionPolicy: Retain
     Properties:
-      FunctionName: !Ref EdgeFunction
-      Description: !Sub "Version for ${ResourcePrefix} EdgeFunction"
-
-  EdgeFunctionLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub "/aws/lambda/${EdgeFunction}"
-      RetentionInDays: 14
-
-  # Custom resource to handle cleanup
-  EdgeFunctionCleaner:
-    Type: AWS::Lambda::Function
-    Properties:
-      Code:
-        ZipFile: |
-          import boto3
-          import cfnresponse
-          import time
-          import os
-          
-          def wait_for_distribution_updates():
-              cloudfront = boto3.client('cloudfront')
-              paginator = cloudfront.get_paginator('list_distributions')
-              
-              for _ in range(30):  # Check for 30 minutes max
-                  all_deployed = True
-                  
-                  for page in paginator.paginate():
-                      if 'Items' not in page['DistributionList']:
-                          continue
-                          
-                      for distribution in page['DistributionList']['Items']:
-                          if distribution['Status'] != 'Deployed':
-                              all_deployed = False
-                              break
-                      
-                      if not all_deployed:
-                          break
-                  
-                  if all_deployed:
-                      return True
-                  
-                  time.sleep(60)  # Wait 1 minute before checking again
-              
-              return False
-          
-          def handler(event, context):
-              if event['RequestType'] == 'Delete':
-                  try:
-                      lambda_client = boto3.client('lambda')
-                      function_name = event['ResourceProperties']['FunctionName']
-                      
-                      print(f"Starting cleanup for {function_name}")
-                      
-                      # Wait for CloudFront distributions to be fully deployed
-                      print("Waiting for CloudFront distributions to be deployed...")
-                      if not wait_for_distribution_updates():
-                          raise Exception("Timeout waiting for CloudFront distributions to be deployed")
-                      
-                      print("Waiting additional time for replicas to be removed...")
-                      time.sleep(600)  # Wait additional 10 minutes
-                      
-                      print("Attempting to delete function versions...")
-                      versions = lambda_client.list_versions_by_function(FunctionName=function_name)
-                      
-                      for version in versions['Versions']:
-                          if version['Version'] != '$LATEST':
-                              try:
-                                  print(f"Deleting version {version['Version']}...")
-                                  lambda_client.delete_function(
-                                      FunctionName=function_name,
-                                      Qualifier=version['Version']
-                                  )
-                              except lambda_client.exceptions.ResourceNotFoundException:
-                                  print(f"Version {version['Version']} already deleted")
-                              except Exception as e:
-                                  print(f"Error deleting version {version['Version']}: {str(e)}")
-                                  if 'replicated function' not in str(e).lower():
-                                      raise
-                      
-                      try:
-                          print("Deleting main function...")
-                          lambda_client.delete_function(FunctionName=function_name)
-                      except lambda_client.exceptions.ResourceNotFoundException:
-                          print("Main function already deleted")
-                      except Exception as e:
-                          print(f"Error deleting main function: {str(e)}")
-                          if 'replicated function' not in str(e).lower():
-                              raise
-                      
-                      print("Cleanup completed successfully")
-                      cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
-                  except Exception as e:
-                      print(f"Cleanup failed: {str(e)}")
-                      cfnresponse.send(event, context, cfnresponse.FAILED, {'Error': str(e)})
-              else:
-                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
-
-      Handler: index.handler
-      Role: !GetAtt CleanerExecutionRole.Arn
-      Runtime: python3.10
-      Timeout: 900  # 15 minutes
-
-  CleanerExecutionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-      Policies:
-        - PolicyName: DeleteLambdaVersions
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - lambda:DeleteFunction
-                  - lambda:ListVersionsByFunction
-                  - cloudfront:ListDistributions
-                Resource: 
-                  - !GetAtt EdgeFunction.Arn
-                  - "*"  # For CloudFront ListDistributions
-
-  EdgeFunctionCleanerTrigger:
-    Type: Custom::EdgeFunctionCleaner
-    DependsOn: EdgeFunctionVersion
-    Properties:
-      ServiceToken: !GetAtt EdgeFunctionCleaner.Arn
-      FunctionName: !Ref EdgeFunction
+      FunctionName: !Ref EdgeLambdaFunction
+      Description: v1
 
 Outputs:
   LambdaVersionArn:
-    Description: ARN of the Lambda@Edge function version
-    Value: !Ref EdgeFunctionVersion
+    Description: Lambda function version ARN
+    Value: !Ref EdgeLambdaVersion
