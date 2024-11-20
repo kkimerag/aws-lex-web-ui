@@ -709,24 +709,6 @@ Resources:
               Preload: False
               AccessControlMaxAgeSec: 47304000
 
-    CustomOriginRequestPolicy:
-        Type: AWS::CloudFront::OriginRequestPolicy
-        Properties:
-            OriginRequestPolicyConfig:
-                Name: !Sub "${ResourcePrefix}-CustomCorsS3OriginWithReferer"
-                Comment: "Similar to Managed-CORS-S3Origin but includes referer header"
-                HeadersConfig:
-                    HeaderBehavior: "whitelist"
-                    Headers:
-                        - "Origin"
-                        - "Access-Control-Request-Method"
-                        - "Access-Control-Request-Headers"
-                        - "referer"
-                CookiesConfig:
-                    CookieBehavior: "none"
-                QueryStringsConfig:
-                    QueryStringBehavior: "none"
-          
     LexWebUiDistribution:
         Type: AWS::CloudFront::Distribution
         DependsOn:
@@ -768,7 +750,7 @@ Resources:
               Compress: true
               TargetOriginId: webuiorigin
               CachePolicyId: "658327ea-f89d-4fab-a63d-7e88639e58f6"
-              OriginRequestPolicyId: !Ref CustomOriginRequestPolicy
+              OriginRequestPolicyId: "88a5eaf4-2fd4-4709-b370-b4c650ea3fcf"
               ViewerProtocolPolicy: redirect-to-https
               ResponseHeadersPolicyId: !GetAtt LexWebUIResponseHeaderPolicy.Id
               LambdaFunctionAssociations:
