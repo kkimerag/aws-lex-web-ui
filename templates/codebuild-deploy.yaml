@@ -755,7 +755,7 @@ Resources:
               ResponseHeadersPolicyId: !GetAtt LexWebUIResponseHeaderPolicy.Id
               LambdaFunctionAssociations:
                 - EventType: origin-request
-                  LambdaFunctionARN: !Ref EdgeLambdaVersion
+                  LambdaFunctionARN: !Ref EdgeLambdaVersionArn
               ForwardedValues:
                   QueryString: false
                   Cookies:
