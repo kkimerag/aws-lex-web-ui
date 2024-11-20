@@ -37,6 +37,8 @@ Resources:
 
   EdgeFunction:
     Type: AWS::Lambda::Function
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Retain
     Properties:
       Code:
         ZipFile: |
@@ -84,6 +86,8 @@ Resources:
 
   EdgeFunctionVersion:
     Type: AWS::Lambda::Version
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Retain
     Properties:
       FunctionName: !Ref EdgeFunction
       Description: !Sub "Version for ${ResourcePrefix} EdgeFunction"
@@ -103,78 +107,90 @@ Resources:
           import boto3
           import cfnresponse
           import time
+          import os
+          
+          def wait_for_distribution_updates():
+              cloudfront = boto3.client('cloudfront')
+              paginator = cloudfront.get_paginator('list_distributions')
+              
+              for _ in range(30):  # Check for 30 minutes max
+                  all_deployed = True
+                  
+                  for page in paginator.paginate():
+                      if 'Items' not in page['DistributionList']:
+                          continue
+                          
+                      for distribution in page['DistributionList']['Items']:
+                          if distribution['Status'] != 'Deployed':
+                              all_deployed = False
+                              break
+                      
+                      if not all_deployed:
+                          break
+                  
+                  if all_deployed:
+                      return True
+                  
+                  time.sleep(60)  # Wait 1 minute before checking again
+              
+              return False
           
           def handler(event, context):
               if event['RequestType'] == 'Delete':
                   try:
                       lambda_client = boto3.client('lambda')
-                      cloudfront_client = boto3.client('cloudfront')
                       function_name = event['ResourceProperties']['FunctionName']
                       
-                      # First, list all CloudFront distributions
-                      paginator = cloudfront_client.get_paginator('list_distributions')
-                      has_replicas = True
+                      print(f"Starting cleanup for {function_name}")
                       
-                      # Keep checking for replicas for up to 30 minutes
-                      max_attempts = 30
-                      attempt = 0
+                      # Wait for CloudFront distributions to be fully deployed
+                      print("Waiting for CloudFront distributions to be deployed...")
+                      if not wait_for_distribution_updates():
+                          raise Exception("Timeout waiting for CloudFront distributions to be deployed")
                       
-                      while has_replicas and attempt < max_attempts:
-                          has_replicas = False
-                          
-                          # Check each distribution for Lambda associations
-                          for page in paginator.paginate():
-                              if 'Items' in page['DistributionList']:
-                                  for dist in page['DistributionList']['Items']:
-                                      if 'DefaultCacheBehavior' in dist:
-                                          if 'LambdaFunctionAssociations' in dist['DefaultCacheBehavior']:
-                                              for assoc in dist['DefaultCacheBehavior']['LambdaFunctionAssociations'].get('Items', []):
-                                                  if function_name in assoc.get('LambdaFunctionARN', ''):
-                                                      has_replicas = True
-                                                      break
-                          
-                          if has_replicas:
-                              attempt += 1
-                              if attempt < max_attempts:
-                                  time.sleep(60)  # Wait 1 minute before checking again
-                              
-                      if not has_replicas:
-                          # Get all versions
-                          versions = lambda_client.list_versions_by_function(FunctionName=function_name)
-                          
-                          # Try to delete versions
-                          for version in versions['Versions']:
-                              if version['Version'] != '$LATEST':
-                                  try:
-                                      lambda_client.delete_function(
-                                          FunctionName=function_name,
-                                          Qualifier=version['Version']
-                                      )
-                                  except lambda_client.exceptions.ResourceNotFoundException:
-                                      pass
-                                  except Exception as e:
-                                      if 'replicated function' not in str(e).lower():
-                                          raise
-                          
-                          # Try to delete the function itself
-                          try:
-                              lambda_client.delete_function(FunctionName=function_name)
-                          except lambda_client.exceptions.ResourceNotFoundException:
-                              pass
-                          except Exception as e:
-                              if 'replicated function' not in str(e).lower():
-                                  raise
-                          
+                      print("Waiting additional time for replicas to be removed...")
+                      time.sleep(600)  # Wait additional 10 minutes
+                      
+                      print("Attempting to delete function versions...")
+                      versions = lambda_client.list_versions_by_function(FunctionName=function_name)
+                      
+                      for version in versions['Versions']:
+                          if version['Version'] != '$LATEST':
+                              try:
+                                  print(f"Deleting version {version['Version']}...")
+                                  lambda_client.delete_function(
+                                      FunctionName=function_name,
+                                      Qualifier=version['Version']
+                                  )
+                              except lambda_client.exceptions.ResourceNotFoundException:
+                                  print(f"Version {version['Version']} already deleted")
+                              except Exception as e:
+                                  print(f"Error deleting version {version['Version']}: {str(e)}")
+                                  if 'replicated function' not in str(e).lower():
+                                      raise
+                      
+                      try:
+                          print("Deleting main function...")
+                          lambda_client.delete_function(FunctionName=function_name)
+                      except lambda_client.exceptions.ResourceNotFoundException:
+                          print("Main function already deleted")
+                      except Exception as e:
+                          print(f"Error deleting main function: {str(e)}")
+                          if 'replicated function' not in str(e).lower():
+                              raise
+                      
+                      print("Cleanup completed successfully")
                       cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
                   except Exception as e:
-                      print(f"Error during cleanup: {str(e)}")
+                      print(f"Cleanup failed: {str(e)}")
                       cfnresponse.send(event, context, cfnresponse.FAILED, {'Error': str(e)})
               else:
                   cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+
       Handler: index.handler
       Role: !GetAtt CleanerExecutionRole.Arn
       Runtime: python3.10
-      Timeout: 900  # 15 minutes timeout
+      Timeout: 900  # 15 minutes
 
   CleanerExecutionRole:
     Type: AWS::IAM::Role
@@ -204,6 +220,7 @@ Resources:
 
   EdgeFunctionCleanerTrigger:
     Type: Custom::EdgeFunctionCleaner
+    DependsOn: EdgeFunctionVersion
     Properties:
       ServiceToken: !GetAtt EdgeFunctionCleaner.Arn
       FunctionName: !Ref EdgeFunction
