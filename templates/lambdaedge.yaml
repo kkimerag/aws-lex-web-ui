@@ -178,11 +178,11 @@ Resources:
             Timeout: 900  # 15 minutes
             MemorySize: 128
 
-    EdgeLambdaCleanupTrigger:
-        Type: Custom::EdgeLambdaCleanup
-        Properties:
-            ServiceToken: !GetAtt EdgeLambdaCleanupFunction.Arn
-            FunctionName: !Ref EdgeLambdaFunction
+  EdgeLambdaCleanupTrigger:
+      Type: Custom::EdgeLambdaCleanup
+      Properties:
+          ServiceToken: !GetAtt EdgeLambdaCleanupFunction.Arn
+          FunctionName: !Ref EdgeLambdaFunction
 
   EdgeLambdaFunction:
       DependsOn: EdgeLambdaCleanupFunction
