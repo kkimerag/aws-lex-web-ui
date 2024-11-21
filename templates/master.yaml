@@ -771,19 +771,20 @@ Resources:
                 AllowStreamingResponses: !Ref AllowStreamingResponses
                 AllowedSignUpEmailDomain: !Ref AllowedSignUpEmailDomain
 
-    EdgeLambdaStack:
+    PathEdgeLambdaStack:
         Type: AWS::CloudFormation::Stack
         Properties:
             TemplateURL: !Sub "https://${BootstrapBucket}.s3.${AWS::Region}.amazonaws.com/${BootstrapPrefix}/templates/path-lambdaedge.yaml"
             Parameters:
                 ResourcePrefix: !Ref "AWS::StackName"
 
-    EdgeLambdaStack:
+    CspEdgeLambdaStack:
         Type: AWS::CloudFormation::Stack
         Properties:
             TemplateURL: !Sub "https://${BootstrapBucket}.s3.${AWS::Region}.amazonaws.com/${BootstrapPrefix}/templates/csp-lambdaedge.yaml"
             Parameters:
-                ResourcePrefix: !Ref "AWS::StackName"            
+                ResourcePrefix: !Ref "AWS::StackName"    
+                        
     ##########################################################################
     # Simplified deployment using CodeBuild to build config and push to S3
     ##########################################################################
@@ -897,7 +898,7 @@ Resources:
                 VpcSubnetId: !If [NeedsVpc, !Ref VpcSubnetId, !Ref "AWS::NoValue"]
                 VpcSecurityGroupId: !If [NeedsVpc, !Ref VpcSecurityGroupId, !Ref "AWS::NoValue"]
                 Timestamp: 1726842081
-                EdgeLambdaVersionArn: !GetAtt EdgeLambdaStack.Outputs.LambdaVersionArn
+                EdgeLambdaVersionArn: !GetAtt PathEdgeLambdaStack.Outputs.LambdaVersionArn
 
     CognitoIdentityPoolConfig:
         Type: AWS::CloudFormation::Stack
