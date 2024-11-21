@@ -1,0 +1,190 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFormation template for Lambda@Edge function to handle CORS and security headers'
+
+Parameters:
+  ResourcePrefix:
+    Type: String
+    Description: Prefix to be used for resource names
+
+Resources:
+  LambdaEdgeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+                - edgelambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: EdgeLambdaLogsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: 
+                  - !Sub "arn:aws:logs:*:${AWS::AccountId}:log-group:/aws/lambda/*"
+                  - !Sub "arn:aws:logs:*:${AWS::AccountId}:log-group:/aws/lambda/*:*"
+
+  EdgeFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: |
+          def lambda_handler(event, context):
+              request = event['Records'][0]['cf']['request']
+              response = event['Records'][0]['cf']['response']
+              
+              # Set headers
+              headers = response['headers']
+              
+              headers['access-control-allow-origin'] = [{
+                  'key': 'Access-Control-Allow-Origin',
+                  'value': '*'
+              }]
+              
+              headers['access-control-allow-methods'] = [{
+                  'key': 'Access-Control-Allow-Methods',
+                  'value': 'GET, POST, OPTIONS'
+              }]
+              
+              headers['access-control-allow-headers'] = [{
+                  'key': 'Access-Control-Allow-Headers',
+                  'value': 'Content-Type, X-Amz-Date, Authorization, X-Api-Key, X-Amz-Security-Token, X-Amz-User-Agent'
+              }]
+              
+              headers['access-control-allow-credentials'] = [{
+                  'key': 'Access-Control-Allow-Credentials',
+                  'value': 'true'
+              }]
+              
+              headers['content-security-policy'] = [{
+                  'key': 'Content-Security-Policy',
+                  'value': "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; connect-src * 'unsafe-inline' data: blob:; script-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline' data: blob:;"
+              }]
+              
+              # Handle OPTIONS preflight
+              if request['method'] == 'OPTIONS':
+                  response['status'] = '204'
+                  response['statusDescription'] = 'OK'
+              
+              return response
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdaEdgeRole.Arn
+      Runtime: python3.9
+      FunctionName: !Sub "${ResourcePrefix}-edge-function"
+      Timeout: 5
+      MemorySize: 128
+
+  EdgeFunctionVersion:
+    Type: AWS::Lambda::Version
+    Properties:
+      FunctionName: !Ref EdgeFunction
+      Description: 'Version for Lambda@Edge'
+
+  # Custom resource to handle cleanup
+  EdgeFunctionCleanup:
+    Type: Custom::EdgeFunctionCleanup
+    Properties:
+      ServiceToken: !GetAtt CleanupFunction.Arn
+      FunctionName: !Ref EdgeFunction
+      Region: !Ref 'AWS::Region'
+
+  CleanupFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Role: !GetAtt CleanupFunctionRole.Arn
+      Code:
+        ZipFile: |
+          import boto3
+          import cfnresponse
+          import time
+          
+          def handler(event, context):
+              # Initialize response data
+              response_data = {}
+              
+              try:
+                  # Only process DeleteStack events
+                  if event['RequestType'] == 'Delete':
+                      lambda_client = boto3.client('lambda')
+                      function_name = event['ResourceProperties']['FunctionName']
+                      region = event['ResourceProperties']['Region']
+                      
+                      # Get all versions of the function
+                      versions = lambda_client.list_versions_by_function(
+                          FunctionName=function_name
+                      )
+                      
+                      # Wait for potential in-progress replications
+                      time.sleep(30)
+                      
+                      # Delete all versions except $LATEST
+                      for version in versions['Versions']:
+                          if version['Version'] != '$LATEST':
+                              try:
+                                  lambda_client.delete_function(
+                                      FunctionName=function_name,
+                                      Qualifier=version['Version']
+                                  )
+                              except lambda_client.exceptions.ResourceNotFoundException:
+                                  pass
+                      
+                      # Finally delete the function itself
+                      try:
+                          lambda_client.delete_function(
+                              FunctionName=function_name
+                          )
+                      except lambda_client.exceptions.ResourceNotFoundException:
+                          pass
+                  
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data)
+              except Exception as e:
+                  response_data['Error'] = str(e)
+                  cfnresponse.send(event, context, cfnresponse.FAILED, response_data)
+      Runtime: python3.9
+      Timeout: 60
+      MemorySize: 128
+
+  CleanupFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CleanupPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:DeleteFunction
+                  - lambda:ListVersionsByFunction
+                Resource: !Sub "arn:aws:lambda:*:${AWS::AccountId}:function:${ResourcePrefix}-edge-function*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: 
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*"
+
+Outputs:
+  LambdaVersionArn:
+    Description: ARN of the Lambda function version for Edge association
+    Value: !Ref EdgeFunctionVersion

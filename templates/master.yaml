@@ -774,10 +774,16 @@ Resources:
     EdgeLambdaStack:
         Type: AWS::CloudFormation::Stack
         Properties:
-            TemplateURL: !Sub "https://${BootstrapBucket}.s3.${AWS::Region}.amazonaws.com/${BootstrapPrefix}/templates/lambdaedge.yaml"
+            TemplateURL: !Sub "https://${BootstrapBucket}.s3.${AWS::Region}.amazonaws.com/${BootstrapPrefix}/templates/path-lambdaedge.yaml"
             Parameters:
                 ResourcePrefix: !Ref "AWS::StackName"
 
+    EdgeLambdaStack:
+        Type: AWS::CloudFormation::Stack
+        Properties:
+            TemplateURL: !Sub "https://${BootstrapBucket}.s3.${AWS::Region}.amazonaws.com/${BootstrapPrefix}/templates/csp-lambdaedge.yaml"
+            Parameters:
+                ResourcePrefix: !Ref "AWS::StackName"            
     ##########################################################################
     # Simplified deployment using CodeBuild to build config and push to S3
     ##########################################################################
