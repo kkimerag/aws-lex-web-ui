@@ -188,7 +188,7 @@ Resources:
       DependsOn: EdgeLambdaCleanupFunction
       Type: AWS::Lambda::Function
       Properties:
-          FunctionName: !Sub "${ResourcePrefix}-edge-lambda"
+          FunctionName: !Sub "${ResourcePrefix}-path-edge-lambda"
           Code:
               ZipFile: |
                   def lambda_handler(event, context):
@@ -215,7 +215,7 @@ Resources:
 
           Handler: index.lambda_handler
           Role: !GetAtt EdgeLambdaRole.Arn
-          Runtime: python3.9
+          Runtime: python3.13
           Timeout: 5
           MemorySize: 128
 

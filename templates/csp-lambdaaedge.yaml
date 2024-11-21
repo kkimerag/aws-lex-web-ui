@@ -80,8 +80,8 @@ Resources:
               return response
       Handler: index.lambda_handler
       Role: !GetAtt LambdaEdgeRole.Arn
-      Runtime: python3.9
-      FunctionName: !Sub "${ResourcePrefix}-edge-function"
+      Runtime: python3.13
+      FunctionName: !Sub "${ResourcePrefix}-csp-edge-function"
       Timeout: 5
       MemorySize: 128
 
