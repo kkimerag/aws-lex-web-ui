@@ -8,21 +8,31 @@ Parameters:
 
 Resources:
   EdgeLambdaRole:
-      Type: AWS::IAM::Role
-      Properties:
-          RoleName: !Sub "${ResourcePrefix}-path-edge-lambda-role"
-          AssumeRolePolicyDocument:
-              Version: '2012-10-17'
-              Statement:
-                  - Effect: Allow
-                    Principal:
-                        Service:
-                            - lambda.amazonaws.com
-                            - edgelambda.amazonaws.com
-                    Action: sts:AssumeRole
-          ManagedPolicyArns:
-              - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-          Path: "/"
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ResourcePrefix}-path-edge-lambda-role"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+                - edgelambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: CloudWatchLogsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "arn:aws:logs:*:*:*"
 
   EdgeLambdaCleanupRole:
         Type: AWS::IAM::Role
@@ -184,40 +194,45 @@ Resources:
           ServiceToken: !GetAtt EdgeLambdaCleanupFunction.Arn
           FunctionName: !Ref EdgeLambdaFunction
 
-  EdgeLambdaFunction:
-      DependsOn: EdgeLambdaCleanupFunction
-      Type: AWS::Lambda::Function
-      Properties:
-          FunctionName: !Sub "${ResourcePrefix}-path-edge-lambda"
-          Code:
-              ZipFile: |
-                  def lambda_handler(event, context):
-                      request = event['Records'][0]['cf']['request']
-                      uri = request['uri']
-                      
-                      headers = request.get('headers', {})
-                      
-                      referer = headers.get('referer', [{'value': ''}])[0].get('value', '')
-                      print(f"Referer: {referer}")
-                      
-                      try:
-                          if referer:
-                              folder = referer.split('://')[-1].split('/')[1]
-                              uri = uri.lstrip('/')
-                              request['uri'] = f"/{folder}/{uri}"
-                              print(f"Modified URI: {request['uri']}")
-                          else:
-                              print("No referer found")
-                      except Exception as e:
-                          print(f"Error: {e}")
-                          
-                      return request
+  EdgeLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ResourcePrefix}-path-edge-lambda"
+      RetentionInDays: 14  # Adjust retention period as needed.
 
-          Handler: index.lambda_handler
-          Role: !GetAtt EdgeLambdaRole.Arn
-          Runtime: python3.13
-          Timeout: 5
-          MemorySize: 128
+  EdgeLambdaFunction:
+    DependsOn: EdgeLambdaRole
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ResourcePrefix}-path-edge-lambda"
+      Code:
+        ZipFile: |
+          def lambda_handler(event, context):
+              request = event['Records'][0]['cf']['request']
+              uri = request['uri']
+              
+              headers = request.get('headers', {})
+              
+              referer = headers.get('referer', [{'value': ''}])[0].get('value', '')
+              print(f"Referer: {referer}")
+              
+              try:
+                  if referer:
+                      folder = referer.split('://')[-1].split('/')[1]
+                      uri = uri.lstrip('/')
+                      request['uri'] = f"/{folder}/{uri}"
+                      print(f"Modified URI: {request['uri']}")
+                  else:
+                      print("No referer found")
+              except Exception as e:
+                  print(f"Error: {e}")
+                  
+              return request
+      Handler: index.lambda_handler
+      Role: !GetAtt EdgeLambdaRole.Arn
+      Runtime: python3.11  # Use an appropriate runtime version.
+      Timeout: 5
+      MemorySize: 128
 
   EdgeLambdaVersion:
       Type: AWS::Lambda::Version
