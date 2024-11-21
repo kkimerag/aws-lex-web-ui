@@ -10,7 +10,7 @@ Resources:
   EdgeLambdaRole:
       Type: AWS::IAM::Role
       Properties:
-          RoleName: !Sub "${ResourcePrefix}-edge-lambda-role"
+          RoleName: !Sub "${ResourcePrefix}-path-edge-lambda-role"
           AssumeRolePolicyDocument:
               Version: '2012-10-17'
               Statement:
@@ -230,4 +230,4 @@ Outputs:
       Description: Lambda function version ARN
       Value: !Ref EdgeLambdaVersion
       Export:
-          Name: !Sub "${ResourcePrefix}-edge-lambda-version"
+          Name: !Sub "${ResourcePrefix}-path-edge-lambda-version"
