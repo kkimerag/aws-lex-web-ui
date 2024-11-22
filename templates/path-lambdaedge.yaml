@@ -55,7 +55,7 @@ Resources:
                 Action:
                   - lambda:ListVersionsByFunction
                   - lambda:DeleteFunction
-                Resource: !Sub "arn:aws:lambda:*:${AWS::AccountId}:function:${ResourcePrefix}-path-edge-lambda*"
+                Resource: !Sub "arn:aws:lambda:*:${AWS::AccountId}:function:${ResourcePrefix}-path-edge-function*"
               - Effect: Allow
                 Action:
                   - logs:CreateLogGroup
@@ -109,14 +109,14 @@ Resources:
   EdgeLambdaLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub "/aws/lambda/${ResourcePrefix}-path-edge-lambda"
+      LogGroupName: !Sub "/aws/lambda/${ResourcePrefix}-path-edge-function"
       RetentionInDays: 14  # Adjust retention period as needed.
 
   EdgeLambdaFunction:
     DependsOn: EdgeLambdaRole
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Sub "${ResourcePrefix}-path-edge-lambda"
+      FunctionName: !Sub "${ResourcePrefix}-path-edge-function"
       Code:
         ZipFile: |
           def lambda_handler(event, context):
@@ -157,4 +157,4 @@ Outputs:
     Description: Lambda function version ARN
     Value: !Ref EdgeLambdaVersion
     Export:
-      Name: !Sub "${ResourcePrefix}-path-edge-lambda-version"
+      Name: !Sub "${ResourcePrefix}-path-edge-function-version"
