@@ -1,10 +1,10 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: Lambda@Edge function for Origin Request modification
+Description: Lambda@Edge function for Origin Request modification with enhanced cleanup logic.
 
 Parameters:
-    ResourcePrefix:
-        Type: String
-        Description: Prefix to use for resource names
+  ResourcePrefix:
+    Type: String
+    Description: Prefix to use for resource names
 
 Resources:
   EdgeLambdaRole:
@@ -35,164 +35,76 @@ Resources:
                 Resource: "arn:aws:logs:*:*:*"
 
   EdgeLambdaCleanupRole:
-        Type: AWS::IAM::Role
-        Properties:
-            AssumeRolePolicyDocument:
-                Version: '2012-10-17'
-                Statement:
-                    - Effect: Allow
-                      Principal:
-                          Service: lambda.amazonaws.com
-                      Action: sts:AssumeRole
-            ManagedPolicyArns:
-                - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-            Policies:
-                - PolicyName: LambdaEdgeCleanup
-                  PolicyDocument:
-                      Version: '2012-10-17'
-                      Statement:
-                          - Effect: Allow
-                            Action:
-                                - lambda:DeleteFunction
-                                - lambda:GetFunction
-                                - cloudfront:GetDistribution
-                                - cloudfront:ListDistributions
-                            Resource: '*'
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: LambdaEdgeCleanup
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:ListVersionsByFunction
+                  - lambda:DeleteFunction
+                Resource: !Sub "arn:aws:lambda:*:${AWS::AccountId}:function:${ResourcePrefix}-path-edge-lambda*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "arn:aws:logs:*:*:*"
 
   EdgeLambdaCleanupFunction:
-        Type: AWS::Lambda::Function
-        Properties:
-            Handler: index.handler
-            Role: !GetAtt EdgeLambdaCleanupRole.Arn
-            Code:
-                ZipFile: |
-                    import boto3
-                    import cfnresponse
-                    import time
-                    
-                    def handler(event, context):
-                        lambda_client = boto3.client('lambda')
-                        cf_client = boto3.client('cloudfront')
-                        
-                        try:
-                            if event['RequestType'] == 'Delete':
-                                function_name = event['ResourceProperties']['FunctionName']
-                                
-                                # Wait for CloudFront to fully disable the Lambda@Edge function
-                                wait_for_function_disable(cf_client, function_name)
-                                
-                                # List and delete all versions first
-                                delete_all_versions(lambda_client, function_name)
-                                
-                                # Finally try to delete the function itself
-                                retry_delete_function(lambda_client, function_name)
-                                
-                            cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
-                        except Exception as e:
-                            print(f"Error: {str(e)}")
-                            cfnresponse.send(event, context, cfnresponse.FAILED, {"Error": str(e)})
-                    
-                    def delete_all_versions(lambda_client, function_name):
-                        try:
-                            # Get all versions except $LATEST
-                            paginator = lambda_client.get_paginator('list_versions_by_function')
-                            for page in paginator.paginate(FunctionName=function_name):
-                                for version in page['Versions']:
-                                    version_number = version['Version']
-                                    if version_number != '$LATEST':
-                                        try:
-                                            print(f"Attempting to delete version {version_number}")
-                                            # Try to delete the version
-                                            max_attempts = 5
-                                            for attempt in range(max_attempts):
-                                                try:
-                                                    lambda_client.delete_function(
-                                                        FunctionName=function_name,
-                                                        Qualifier=version_number
-                                                    )
-                                                    print(f"Successfully deleted version {version_number}")
-                                                    break
-                                                except lambda_client.exceptions.ResourceNotFoundException:
-                                                    print(f"Version {version_number} already deleted")
-                                                    break
-                                                except Exception as e:
-                                                    if attempt == max_attempts - 1:
-                                                        print(f"Failed to delete version {version_number} after {max_attempts} attempts: {str(e)}")
-                                                    else:
-                                                        print(f"Attempt {attempt + 1} failed, retrying in 30 seconds...")
-                                                        time.sleep(30)
-                                            
-                                        except Exception as e:
-                                            print(f"Error deleting version {version_number}: {str(e)}")
-                                            # Continue with other versions even if one fails
-                                            continue
-                        except Exception as e:
-                            print(f"Error listing versions: {str(e)}")
-                            raise
-                    
-                    def wait_for_function_disable(cf_client, function_name):
-                        max_attempts = 30
-                        attempt = 0
-                        while attempt < max_attempts:
-                            distributions = cf_client.list_distributions()['DistributionList'].get('Items', [])
-                            is_in_use = False
-                            
-                            for dist in distributions:
-                                dist_config = cf_client.get_distribution(Id=dist['Id'])['Distribution']['DistributionConfig']
-                                if check_function_in_distribution(dist_config, function_name):
-                                    is_in_use = True
-                                    break
-                            
-                            if not is_in_use:
-                                print(f"Function {function_name} is no longer used by any CloudFront distributions")
-                                # Add additional wait time after confirmation
-                                time.sleep(60)  # Wait an extra minute to be sure
-                                return
-                                
-                            attempt += 1
-                            if attempt < max_attempts:
-                                time.sleep(30)  # Wait 30 seconds before checking again
-                        
-                        raise Exception(f"Timeout waiting for function {function_name} to be disabled in CloudFront")
-                    
-                    def check_function_in_distribution(dist_config, function_name):
-                        behavior = dist_config.get('DefaultCacheBehavior', {})
-                        lambdas = behavior.get('LambdaFunctionAssociations', {}).get('Items', [])
-                        
-                        for lambda_assoc in lambdas:
-                            if function_name in lambda_assoc.get('LambdaFunctionARN', ''):
-                                return True
-                        return False
-                    
-                    def retry_delete_function(lambda_client, function_name):
-                        max_attempts = 10
-                        attempt = 0
-                        
-                        while attempt < max_attempts:
-                            try:
-                                lambda_client.delete_function(FunctionName=function_name)
-                                print(f"Successfully deleted function {function_name}")
-                                return
-                            except lambda_client.exceptions.ResourceNotFoundException:
-                                print(f"Function {function_name} already deleted")
-                                return
-                            except Exception as e:
-                                print(f"Attempt {attempt + 1} failed: {str(e)}")
-                                attempt += 1
-                                if attempt < max_attempts:
-                                    time.sleep(30)
-                        
-                        raise Exception(f"Failed to delete function {function_name} after {max_attempts} attempts")
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Role: !GetAtt EdgeLambdaCleanupRole.Arn
+      Code:
+        ZipFile: |
+          import boto3
+          import cfnresponse
+          import time
 
-            Runtime: python3.9
-            Timeout: 900  # 15 minutes
-            MemorySize: 128
+          def handler(event, context):
+              try:
+                  if event['RequestType'] == 'Delete':
+                      lambda_client = boto3.client('lambda')
+                      function_name = event['ResourceProperties']['FunctionName']
+
+                      # Wait for replication (60 seconds)
+                      time.sleep(60)
+
+                      # List and delete all versions except $LATEST
+                      versions = lambda_client.list_versions_by_function(FunctionName=function_name)['Versions']
+                      for version in versions:
+                          if version['Version'] != '$LATEST':
+                              lambda_client.delete_function(FunctionName=function_name, Qualifier=version['Version'])
+
+                      # Delete main function
+                      lambda_client.delete_function(FunctionName=function_name)
+
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+              except Exception as e:
+                  print(f"Error: {e}")
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {"Error": str(e)})
+      Runtime: python3.9
+      Timeout: 120
+      MemorySize: 128
 
   EdgeLambdaCleanupTrigger:
-      Type: Custom::EdgeLambdaCleanup
-      Properties:
-          ServiceToken: !GetAtt EdgeLambdaCleanupFunction.Arn
-          FunctionName: !Ref EdgeLambdaFunction
+    Type: Custom::EdgeLambdaCleanup
+    Properties:
+      ServiceToken: !GetAtt EdgeLambdaCleanupFunction.Arn
+      FunctionName: !Ref EdgeLambdaFunction
 
   EdgeLambdaLogGroup:
     Type: AWS::Logs::LogGroup
@@ -230,19 +142,19 @@ Resources:
               return request
       Handler: index.lambda_handler
       Role: !GetAtt EdgeLambdaRole.Arn
-      Runtime: python3.11  # Use an appropriate runtime version.
+      Runtime: python3.11
       Timeout: 5
       MemorySize: 128
 
   EdgeLambdaVersion:
-      Type: AWS::Lambda::Version
-      Properties:
-          FunctionName: !Ref EdgeLambdaFunction
-          Description: v1
+    Type: AWS::Lambda::Version
+    Properties:
+      FunctionName: !Ref EdgeLambdaFunction
+      Description: v1
 
 Outputs:
   LambdaVersionArn:
-      Description: Lambda function version ARN
-      Value: !Ref EdgeLambdaVersion
-      Export:
-          Name: !Sub "${ResourcePrefix}-path-edge-lambda-version"
+    Description: Lambda function version ARN
+    Value: !Ref EdgeLambdaVersion
+    Export:
+      Name: !Sub "${ResourcePrefix}-path-edge-lambda-version"

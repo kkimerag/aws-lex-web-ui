@@ -64,7 +64,7 @@ Resources:
       Runtime: python3.9
       MemorySize: 128
       Timeout: 5
-      FunctionName: !Sub "${ResourcePrefix}-edge-function"
+      FunctionName: !Sub "${ResourcePrefix}-csp-edge-function"
 
   # Lambda Version
   EdgeFunctionVersion:
@@ -130,7 +130,7 @@ Resources:
                 Action:
                   - lambda:ListVersionsByFunction
                   - lambda:DeleteFunction
-                Resource: !Sub "arn:aws:lambda:*:${AWS::AccountId}:function:${ResourcePrefix}-edge-function*"
+                Resource: !Sub "arn:aws:lambda:*:${AWS::AccountId}:function:${ResourcePrefix}-csp-edge-function*"
               - Effect: Allow
                 Action:
                   - logs:CreateLogGroup
