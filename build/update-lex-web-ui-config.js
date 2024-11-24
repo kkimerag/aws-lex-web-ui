@@ -243,6 +243,8 @@ Object.keys(config)
       console.log("New Domain Verified");
       if (item.conf.iframe) {
         item.conf.iframe.iframeSrcPath = `/${process.env.DOMAIN_PATH}/index.html#/?lexWebUiEmbed=true`;
+        console.log("New Iframe path");
+        console.log(item.conf.iframe.iframeSrcPath);
       }else{
         console.log("Item Ifram not verified");
       }
