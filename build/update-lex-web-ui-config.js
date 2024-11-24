@@ -227,29 +227,23 @@ function translateAndCreateMp3(localeId, text, output) {
 Object.keys(config)
 .map(function (confKey) { return config[confKey]; })
 .forEach(function (item) {
+  if (process.env.DOMAIN_PATH) {
+    console.log("New Domain Verified");
+    if (item.conf.iframe) {
+      item.conf.iframe.iframeSrcPath = `/${process.env.DOMAIN_PATH}/index.html#/?lexWebUiEmbed=true`;
+      console.log("New Iframe path");
+      console.log(item.conf.iframe.iframeSrcPath);
+    }else{
+      console.log("Item Ifram not verified");
+    }
+  }else{
+    console.log("New Domain not verified")
+  }
+
   fs.writeFile(item.file, JSON.stringify(item.conf, null, 2), function (err) {
     if (err) {
       console.error('[ERROR] could not write file: ', err);
       process.exit(1);
-    }
-
-    console.log("New DOMAIN_PATH:");
-    console.log(process.env.DOMAIN_PATH);
-
-    console.log("Item Object:")
-    console.log(item)
-
-    if (process.env.DOMAIN_PATH) {
-      console.log("New Domain Verified");
-      if (item.conf.iframe) {
-        item.conf.iframe.iframeSrcPath = `/${process.env.DOMAIN_PATH}/index.html#/?lexWebUiEmbed=true`;
-        console.log("New Iframe path");
-        console.log(item.conf.iframe.iframeSrcPath);
-      }else{
-        console.log("Item Ifram not verified");
-      }
-    }else{
-      console.log("New Domain not verified")
     }
 
     // This following code pre-creates mp3 files needed for voice interaction. These files need to be pre-created
