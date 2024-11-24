@@ -27,6 +27,7 @@ DOMAIN_PATH := $(shell echo $(PARENT_ORIGIN) | sed 's|https://||g' | sed 's|/.*|
 ifeq ($(DOMAIN_PATH),)
 DOMAIN_PATH := default
 endif
+export DOMAIN_PATH
 
 # this install all the npm dependencies needed to build from scratch
 install-deps:

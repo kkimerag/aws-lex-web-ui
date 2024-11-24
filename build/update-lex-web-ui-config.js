@@ -157,7 +157,8 @@ const lexV2BotLocaleVoices = {
   'HELP_INTENT',
   'MIN_BUTTON_TOOLTIP_CONTENT',
   'ENABLE_UPLOAD',
-  'UPLOAD_BUCKET_NAME'
+  'UPLOAD_BUCKET_NAME',
+  'DOMAIN_PATH'
 ].forEach(function (envVar) {
   console.info('[INFO] Env var - %s: [%s]', envVar, process.env[envVar]);
 });
@@ -230,6 +231,15 @@ Object.keys(config)
     if (err) {
       console.error('[ERROR] could not write file: ', err);
       process.exit(1);
+    }
+
+    console.log("New DOMAIN_PATH:");
+    console.log(process.env.DOMAIN_PATH);
+
+    if (process.env.DOMAIN_PATH) {
+      if (item.conf.iframe) {
+        item.conf.iframe.iframeSrcPath = `/${process.env.DOMAIN_PATH}/index.html#/?lexWebUiEmbed=true`;
+      }
     }
 
     // This following code pre-creates mp3 files needed for voice interaction. These files need to be pre-created
