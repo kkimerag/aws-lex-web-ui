@@ -236,10 +236,18 @@ Object.keys(config)
     console.log("New DOMAIN_PATH:");
     console.log(process.env.DOMAIN_PATH);
 
+    console.log("Item Object:")
+    console.log(item)
+
     if (process.env.DOMAIN_PATH) {
+      console.log("New Domain Verified");
       if (item.conf.iframe) {
         item.conf.iframe.iframeSrcPath = `/${process.env.DOMAIN_PATH}/index.html#/?lexWebUiEmbed=true`;
+      }else{
+        console.log("Item Ifram not verified");
       }
+    }else{
+      console.log("New Domain not verified")
     }
 
     // This following code pre-creates mp3 files needed for voice interaction. These files need to be pre-created
