@@ -777,12 +777,12 @@ Resources:
             Parameters:
                 ResourcePrefix: !Ref "AWS::StackName"
 
-    CspEdgeLambdaStack:
-        Type: AWS::CloudFormation::Stack
-        Properties:
-            TemplateURL: !Sub "https://${BootstrapBucket}.s3.${AWS::Region}.amazonaws.com/${BootstrapPrefix}/templates/csp-lambdaedge.yaml"
-            Parameters:
-                ResourcePrefix: !Ref "AWS::StackName"    
+    # CspEdgeLambdaStack:
+    #     Type: AWS::CloudFormation::Stack
+    #     Properties:
+    #         TemplateURL: !Sub "https://${BootstrapBucket}.s3.${AWS::Region}.amazonaws.com/${BootstrapPrefix}/templates/csp-lambdaedge.yaml"
+    #         Parameters:
+    #             ResourcePrefix: !Ref "AWS::StackName"    
                         
     ##########################################################################
     # Simplified deployment using CodeBuild to build config and push to S3
