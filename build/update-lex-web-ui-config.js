@@ -236,6 +236,13 @@ Object.keys(config)
     }else{
       console.log("Item Ifram not verified");
     }
+    if(item.conf.ui){
+      item.conf.ui.parentOrigin = `https://${process.env.DOMAIN_PATH}`;
+      console.log("New Parent Origin path");
+      console.log(item.conf.ui.parentOrigin);
+    }else{
+      console.log("Item UI not verified");
+    }
   }else{
     console.log("New Domain not verified")
   }
